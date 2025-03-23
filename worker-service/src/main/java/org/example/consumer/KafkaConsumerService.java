@@ -5,6 +5,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.example.config.GlobalExecutorConfig;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -27,7 +28,7 @@ public class KafkaConsumerService {
         this.consumer = createConsumer();
         this.consumer.subscribe(Collections.singletonList(TOPIC));
         this.dlqProducer = createProducer();
-        this.executorService = Executors.newFixedThreadPool(10); // Tạo 10 thread để xử lý message
+        this.executorService = GlobalExecutorConfig.getExecutor(); // Tạo 10 thread để xử lý message
     }
 
     public void consumeMessages() {
@@ -44,26 +45,32 @@ public class KafkaConsumerService {
         }
     }
 
-    private boolean processWithRetry(ConsumerRecord<String, String> record) {
+    /**
+     * Xử lý 1 record, retry tối đa 3 lần.
+     * Nếu vẫn thất bại thì gửi sang DLQ (ví dụ là 1 topic khác).
+     */
+    private void processWithRetry(ConsumerRecord<String, String> record) {
         int attempt = 0;
         while (attempt < MAX_RETRY) {
-
-            boolean isProcess = processMessage(record);
-            if (!isProcess) {
+            // Gọi hàm xử lý chính
+            boolean processed = processMessage(record);
+            if (processed) {
+                return;
+            } else {
                 attempt++;
-                System.err.printf("[ RETRY %d/%d ] Failed to process message at offset %d: %n",
+                System.err.printf("[ RETRY %d/%d ] Failed to process message at offset %d%n",
                         attempt, MAX_RETRY, record.offset());
             }
         }
-        // Retry thất bại, gửi message vào DLQ
+
+        // Nếu quá 3 lần vẫn fail => gửi vào DLQ
         sendToDLQ(record);
-        return true; // Trả về true để vẫn commit offset (tránh lặp vô hạn)
     }
 
     private boolean processMessage(ConsumerRecord<String, String> record) {
         String threadName = Thread.currentThread().getName();
         System.out.printf(
-                "[ THREAD: %s ] [ PROCESSING ] key=%s, value=%s, partition=%d, offset=%d%n",
+                "%s [ PROCESSING ] key=%s, value=%s, partition=%d, offset=%d%n",
                 threadName, record.key(), record.value(), record.partition(), record.offset()
         );
 

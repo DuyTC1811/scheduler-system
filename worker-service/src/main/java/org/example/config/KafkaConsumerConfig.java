@@ -21,7 +21,7 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false"); // Tự commit offset khi xử lý xong
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false); // Tự commit offset khi xử lý xong
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest"); // Đọc từ đầu nếu chưa có offset
         return new KafkaConsumer<>(props);
     }

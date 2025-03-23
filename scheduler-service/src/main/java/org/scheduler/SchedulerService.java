@@ -7,7 +7,7 @@ import java.util.List;
 
 public class SchedulerService {
     public static void main(String[] args) {
-        List<String> messenger = List.of("fail", "ok", "ok", "ok", "E", "F", "ok", "H");
+        List<String> messenger = List.of("ok");
         KafkaProducerService producer = new KafkaProducerService();
         for (String s : messenger) {
             producer.sendMessage(s);
