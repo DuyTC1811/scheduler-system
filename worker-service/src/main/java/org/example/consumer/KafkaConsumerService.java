@@ -5,12 +5,13 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.example.config.GlobalExecutorConfig;
+import org.apache.kafka.common.errors.WakeupException;
 
 import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.example.config.KafkaConsumerConfig.createConsumer;
 import static org.example.config.KafkaConsumerConfig.createProducer;
@@ -20,6 +21,7 @@ public class KafkaConsumerService {
     private static final String DLQ_TOPIC = "scheduler-topic-dlq";
     private static final int MAX_RETRY = 3;
 
+    private final AtomicBoolean running = new AtomicBoolean(true);
     private final Consumer<String, String> consumer;
     private final Producer<String, String> dlqProducer;
     private final ExecutorService executorService;
@@ -28,21 +30,33 @@ public class KafkaConsumerService {
         this.consumer = createConsumer();
         this.consumer.subscribe(Collections.singletonList(TOPIC));
         this.dlqProducer = createProducer();
-        this.executorService = GlobalExecutorConfig.getExecutor(); // Tạo 10 thread để xử lý message
+        this.executorService = Executors.newVirtualThreadPerTaskExecutor();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
 
     public void consumeMessages() {
-        while (true) {
-            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+        try {
+            while (running.get()) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
 
-            if (records.isEmpty()) continue;
+                if (records.isEmpty()) continue;
 
-
-            for (ConsumerRecord<String, String> record : records) {
-                executorService.submit(() -> processWithRetry(record));
+                for (ConsumerRecord<String, String> record : records) {
+                    executorService.submit(() -> processWithRetry(record));
+                }
+                consumer.commitSync();
             }
-            consumer.commitSync();
+        } catch (WakeupException e) {
+            // Đây là ngoại lệ bình thường khi gọi consumer.wakeup()
+            System.out.println("Consumer is shutting down...");
+        } finally {
+            consumer.close();
+            dlqProducer.close();
+            executorService.shutdown();
+            System.out.println("Consumer closed gracefully.");
         }
+
     }
 
     /**
@@ -95,4 +109,8 @@ public class KafkaConsumerService {
         });
     }
 
+    private void shutdown() {
+        running.set(false); // Báo hiệu vòng lặp dừng lại
+        consumer.wakeup(); // Đánh thức consumer để thoát khỏi poll() ngay lập tức
+    }
 }

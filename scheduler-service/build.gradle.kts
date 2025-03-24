@@ -23,6 +23,7 @@ dependencies {
 
     // HikariCP
     implementation("com.zaxxer:HikariCP:6.2.1")
+    implementation("org.postgresql:postgresql:42.7.5")
 
     // YAML
     implementation("org.yaml:snakeyaml:2.4")
