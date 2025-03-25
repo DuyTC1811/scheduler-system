@@ -27,6 +27,9 @@ dependencies {
 
     // YAML
     implementation("org.yaml:snakeyaml:2.4")
+
+    // FASTERXML
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
 }
 
 tasks.test {

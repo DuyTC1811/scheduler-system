@@ -7,12 +7,14 @@ import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.errors.WakeupException;
 
+import javax.sql.DataSource;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.example.config.DataSourceConfig.getDataSource;
 import static org.example.config.KafkaConsumerConfig.createConsumer;
 import static org.example.config.KafkaConsumerConfig.createProducer;
 
@@ -64,21 +66,38 @@ public class KafkaConsumerService {
      * Nếu vẫn thất bại thì gửi sang DLQ (ví dụ là 1 topic khác).
      */
     private void processWithRetry(ConsumerRecord<String, String> record) {
+        long startTime = System.nanoTime(); // Bắt đầu đo thời gian
         int attempt = 0;
         while (attempt < MAX_RETRY) {
             // Gọi hàm xử lý chính
             boolean processed = processMessage(record);
             if (processed) {
+                long endTime = System.nanoTime(); // Kết thúc thời gian
+                long durationMillis = (endTime - startTime) / 1_000_000;
+                System.out.printf("[ SUCCESS ] Offset %d processed in %d ms (retry %d)%n",
+                        record.offset(), durationMillis, attempt);
                 return;
             } else {
                 attempt++;
                 System.err.printf("[ RETRY %d/%d ] Failed to process message at offset %d%n",
                         attempt, MAX_RETRY, record.offset());
+                try {
+                    Thread.sleep(1000); // Delay giữa các lần retry
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
         }
 
         // Nếu quá 3 lần vẫn fail => gửi vào DLQ
         sendToDLQ(record);
+    }
+
+    private boolean insertDataBase(ConsumerRecord<String, String> record) {
+        DataSource dataSource = getDataSource();
+
+        return false;
     }
 
     private boolean processMessage(ConsumerRecord<String, String> record) {
