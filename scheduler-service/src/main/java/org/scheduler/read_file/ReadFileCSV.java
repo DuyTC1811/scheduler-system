@@ -1,7 +1,5 @@
 package org.scheduler.read_file;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.scheduler.config.YamlConfigLoader;
 import org.scheduler.producer.KafkaProducerService;
 
 import java.io.BufferedReader;
@@ -11,16 +9,16 @@ import java.io.InputStreamReader;
 
 
 public class ReadFileCSV {
-    private final String csvFilePath = "mobiles_dataset_2025.csv";
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String CSV_FILE_PATH = "mobiles_dataset_2025.csv";
+    private static final String CSV_FILE_PATH1 = "scheduler-service/src/main/resources/2019.csv";
 
     public void readFileAndSM() {
         KafkaProducerService producerService = new KafkaProducerService();
 
         long startTime = System.nanoTime(); // Bắt đầu đo thời gian
-        try (InputStream input = YamlConfigLoader.class.getClassLoader().getResourceAsStream(csvFilePath)) {
+        try (InputStream input = ReadFileCSV.class.getClassLoader().getResourceAsStream(CSV_FILE_PATH)) {
             if (input == null) {
-                throw new RuntimeException("Data file not found: " + csvFilePath);
+                throw new RuntimeException("Data file not found: " + CSV_FILE_PATH);
             }
 
             try (BufferedReader br = new BufferedReader(new InputStreamReader(input))) {

@@ -162,9 +162,4 @@ public class KafkaConsumerService {
             }
         });
     }
-
-    private void shutdown() {
-        running.set(false); // Báo hiệu vòng lặp dừng lại
-        consumer.wakeup(); // Đánh thức consumer để thoát khỏi poll() ngay lập tức
-    }
 }
