@@ -1,15 +1,23 @@
 package org.example.consumer;
 
+import de.siegmar.fastcsv.reader.CsvReader;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.errors.WakeupException;
+import org.example.model.Mobiles;
 
 import javax.sql.DataSource;
+import java.io.StringReader;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -74,8 +82,7 @@ public class KafkaConsumerService {
             if (processed) {
                 long endTime = System.nanoTime(); // Kết thúc thời gian
                 long durationMillis = (endTime - startTime) / 1_000_000;
-                System.out.printf("[ SUCCESS ] Offset %d processed in %d ms (retry %d)%n",
-                        record.offset(), durationMillis, attempt);
+                System.out.printf("[ SUCCESS ] Offset %d processed in %d ms (retry %d)%n", record.offset(), durationMillis, attempt);
                 return;
             } else {
                 attempt++;
@@ -94,11 +101,32 @@ public class KafkaConsumerService {
         sendToDLQ(record);
     }
 
-    private boolean insertDataBase(ConsumerRecord<String, String> record) {
-        DataSource dataSource = getDataSource();
 
-        return false;
+    public static Mobiles parseMobilesFromCsvLine(String csvLine) {
+        Mobiles mobile = new Mobiles();
+        String[] fields = csvLine.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+        mobile.setBrand(fields[0]);
+        mobile.setModel(fields[1]);
+        mobile.setWeight(fields[2]);
+        mobile.setRam(fields[3]);
+        mobile.setFrontCamera(fields[4]);
+        mobile.setBackCamera(fields[5]);
+        mobile.setChip(fields[6]);
+        mobile.setBattery(cleanQuotes(fields[7]));
+        mobile.setDisplaySize(fields[8]);
+        mobile.setPricePKR(cleanQuotes(fields[9]));
+        mobile.setPriceINR(cleanQuotes(fields[10]));
+        mobile.setPriceCNY(cleanQuotes(fields[11]));
+        mobile.setPriceUSD(fields[12]);
+        mobile.setPriceAED(cleanQuotes(fields[13]));
+        mobile.setReleaseYear(fields[14]);
+        return mobile;
     }
+
+    private static String cleanQuotes(String input) {
+        return input != null ? input.replaceAll("^\"|\"$", "").trim() : null;
+    }
+
 
     private boolean processMessage(ConsumerRecord<String, String> record) {
         String threadName = Thread.currentThread().getName();
@@ -106,9 +134,40 @@ public class KafkaConsumerService {
                 "%s [ PROCESSING ] key=%s, value=%s, partition=%d, offset=%d%n",
                 threadName, record.key(), record.value(), record.partition(), record.offset()
         );
+        Mobiles mobiles = parseMobilesFromCsvLine(record.value());
+        DataSource dataSource = getDataSource();
 
-        // Giả lập lỗi để test retry
-        return !record.value().contains("fail");
+        String sql = "INSERT INTO mobiles (" +
+                "brand, model, weight, ram, main_camera, front_camera, processor, " +
+                "battery_capacity, screen_size, price_pkr, price_inr, price_cny, price_usd, price_aed, release_year" +
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, mobiles.getBrand());
+            ps.setString(2, mobiles.getModel());
+            ps.setString(3, mobiles.getWeight());
+            ps.setString(4, mobiles.getRam());
+            ps.setString(5, mobiles.getFrontCamera());
+            ps.setString(6, mobiles.getBackCamera());
+            ps.setString(7, mobiles.getChip());
+            ps.setString(8, mobiles.getBattery());
+            ps.setString(9, mobiles.getDisplaySize());
+            ps.setString(10, mobiles.getPricePKR());
+            ps.setString(11, mobiles.getPriceINR());
+            ps.setString(12, mobiles.getPriceCNY());
+            ps.setString(13, mobiles.getPriceUSD());
+            ps.setString(14, mobiles.getPriceAED());
+            ps.setString(15, mobiles.getReleaseYear());
+
+            ps.executeUpdate();
+            return true;
+
+        } catch (SQLException e) {
+            e.printStackTrace(System.err);
+            return false;
+        }
     }
 
     private void sendToDLQ(ConsumerRecord<String, String> record) {

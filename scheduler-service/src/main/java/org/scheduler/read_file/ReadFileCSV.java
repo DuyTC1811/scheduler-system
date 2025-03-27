@@ -14,13 +14,6 @@ public class ReadFileCSV {
     private final String csvFilePath = "mobiles_dataset_2025.csv";
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final String[] HEADERS = {
-            "company_name", "model_name", "weight", "ram", "camera", "processor",
-            "battery_capacity", "screen_size", "launched_price_pakistan",
-            "launched_price_india", "launched_price_china", "launched_price_usa",
-            "launched_price_dubai", "launched_year"
-    };
-
     public void readFileAndSM() {
         KafkaProducerService producerService = new KafkaProducerService();
 
@@ -34,7 +27,7 @@ public class ReadFileCSV {
                 br.readLine(); // bo dong nay
                 String line;
                 while ((line = br.readLine()) != null) {
-                    producerService.sendMessage(objectMapper.writeValueAsString(line));
+                    producerService.sendMessage(line);
                 }
                 producerService.close(); // Đảm bảo đóng producer sau khi gửi xong
             }

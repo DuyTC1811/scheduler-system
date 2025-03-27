@@ -19,9 +19,6 @@ dependencies {
     // HikariCP
     implementation("com.zaxxer:HikariCP:6.2.1")
     implementation("org.postgresql:postgresql:42.7.5")
-
-    // FASTERXML
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
 }
 
 tasks.test {
