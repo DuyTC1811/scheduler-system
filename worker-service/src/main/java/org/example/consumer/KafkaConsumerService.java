@@ -6,6 +6,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.errors.WakeupException;
+import org.example.model.Category;
 import org.example.model.Mobiles;
 
 import javax.sql.DataSource;
@@ -25,7 +26,7 @@ import static org.example.config.KafkaConsumerConfig.createProducer;
 public class KafkaConsumerService {
     private static final String TOPIC = "scheduler-topic";
     private static final String DLQ_TOPIC = "scheduler-topic-dlq";
-    private static final int BATCH_SIZE = 300;
+    private static final int BATCH_SIZE = 5000;
 
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final Consumer<String, String> consumer;
@@ -49,7 +50,7 @@ public class KafkaConsumerService {
                     batch.add(record);
 
                     if (batch.size() >= BATCH_SIZE) {
-                        processBatch(batch);
+                        processCategory(batch);
                         consumer.commitSync();
                         batch.clear();
                     }
@@ -58,7 +59,7 @@ public class KafkaConsumerService {
 
             // Xử lý batch cuối khi consumer dừng
             if (!batch.isEmpty()) {
-                processBatch(batch);
+                processCategory(batch);
                 consumer.commitSync();
                 batch.clear();
             }
@@ -69,6 +70,53 @@ public class KafkaConsumerService {
             consumer.close();
             dlqProducer.close();
             System.out.println("Consumer closed gracefully.");
+        }
+    }
+
+    public static Category parseCategoryFromCsvLine(String csvLine) {
+        String[] fields = csvLine.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+            return new Category(
+                    cleanQuotes(fields[6]),
+                    cleanQuotes(fields[7]),
+                    cleanQuotes(fields[8]),
+                    cleanQuotes(fields[9]),
+                    cleanQuotes(fields[10])
+            );
+    }
+    private void processCategory(List<ConsumerRecord<String, String>> records) {
+        DataSource dataSource = getDataSource();
+        String sql = "INSERT INTO CATEGORYS (EVENT_TIME, EVENT_TYPE, BRAND, PRICE, USER_ID ) VALUES (?, ?, ?, ?, ?)";
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            for (ConsumerRecord<String, String> record : records) {
+                Category category = parseCategoryFromCsvLine(record.value());
+
+                if(category.getBrand() == null || category.getBrand().isEmpty()) {
+                    continue;
+                }
+
+                ps.setString(1, category.getEventTime());
+                ps.setString(2, category.getEventType());
+                ps.setString(3, category.getBrand());
+                ps.setString(4, category.getPrice());
+                ps.setString(5, category.getUserId());
+                ps.addBatch();
+            }
+
+            ps.executeBatch();
+
+            System.out.printf("[ BATCH SUCCESS ] Processed %d records successfully.%n", records.size());
+
+        } catch (SQLException e) {
+            e.printStackTrace(System.err);
+            System.err.println("[ BATCH ERROR ] Sending batch to DLQ immediately.");
+
+            // Nếu batch lỗi, gửi từng record sang DLQ ngay
+            for (ConsumerRecord<String, String> record : records) {
+                sendToDLQ(record);
+            }
         }
     }
 
@@ -100,9 +148,9 @@ public class KafkaConsumerService {
 
     private void processBatch(List<ConsumerRecord<String, String>> records) {
         DataSource dataSource = getDataSource();
-        String sql = "INSERT INTO mobiles (" +
-                "brand, model, weight, ram, main_camera, front_camera, processor, " +
-                "battery_capacity, screen_size, price_pkr, price_inr, price_cny, price_usd, price_aed, release_year" +
+        String sql = "INSERT INTO MOBILES (" +
+                "BRAND, MODEL, WEIGHT, RAM, MAIN_CAMERA, FRONT_CAMERA, PROCESSOR, " +
+                "BATTERY_CAPACITY, SCREEN_SIZE, PRICE_PKR, PRICE_INR, PRICE_CNY, PRICE_USD, PRICE_AED, RELEASE_YEAR" +
                 ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = dataSource.getConnection();
